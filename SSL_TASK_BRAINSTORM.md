@@ -340,6 +340,259 @@ class AggressiveJPEGTokenizer:
 
 **Verdict**: Aggressive JPEG is a practical, fast way to create discrete tokens with natural ordering. Excellent for rapid prototyping before investing in learned tokenizers like VQ-VAE.
 
+---
+
+### 6.6 **Alternatives to JPEG Compression for Tokenization**
+
+JPEG isn't the only compression codec that creates discrete tokens. Here are alternatives with different properties:
+
+#### **1. JPEG 2000** (Wavelet-based)
+
+```
+Pipeline:
+1. Discrete Wavelet Transform (DWT) instead of DCT
+2. Multi-resolution decomposition
+3. Quantization → discrete coefficients
+4. Better at preserving edges than JPEG
+```
+
+**Advantages over JPEG**:
+- ✅ Better edge preservation
+- ✅ True multi-scale (wavelet pyramid)
+- ✅ Less blocking artifacts
+- ✅ Perceptually better quality at same compression
+
+**Disadvantages**:
+- ❌ Slower than JPEG (less hardware support)
+- ❌ More complex
+- ❌ Less widespread adoption
+
+**For SSL**: Wavelet coefficients might be more semantically meaningful than DCT. Multi-resolution decomposition aligns with coarse-to-fine learning.
+
+#### **2. WebP** (Google)
+
+```
+Pipeline (lossy mode):
+1. Similar to VP8 video codec
+2. Block-based prediction
+3. Transform coding (similar to DCT)
+4. Quantization → discrete tokens
+```
+
+**Advantages**:
+- ✅ Better compression than JPEG (~30% smaller)
+- ✅ Fast (hardware accelerated on some platforms)
+- ✅ Block-based like JPEG (familiar structure)
+
+**Disadvantages**:
+- ❌ Less analyzed for ML applications
+- ❌ Codec more complex than JPEG
+
+**For SSL**: Could extract prediction modes and transform coefficients as tokens. May learn better spatial relationships due to intra-prediction.
+
+#### **3. AVIF** (AV1 Image File Format)
+
+```
+Pipeline:
+1. Based on AV1 video codec
+2. Modern transform coding
+3. Advanced intra-prediction
+4. Very high compression
+```
+
+**Advantages**:
+- ✅ State-of-the-art compression (50%+ better than JPEG)
+- ✅ Modern codec with ML-friendly features
+- ✅ Rich prediction modes
+
+**Disadvantages**:
+- ❌ Slow encoding (not hardware accelerated everywhere)
+- ❌ Complex codec
+
+**For SSL**: Prediction modes could be valuable tokens. Learns spatial relationships during encoding.
+
+#### **4. HEIC/HEIF** (Apple/MPEG)
+
+```
+Pipeline:
+1. Based on H.265/HEVC video codec
+2. Intra-frame prediction
+3. Transform + quantization
+4. Used by Apple Photos
+```
+
+**Advantages**:
+- ✅ Good compression
+- ✅ Hardware support on Apple devices
+- ✅ Video codec technology
+
+**Disadvantages**:
+- ❌ Patent encumbered
+- ❌ Platform specific
+- ❌ Complex
+
+#### **5. Video Codecs as Image Compressors**
+
+**H.264 Intra Frames**:
+```
+Use I-frames from H.264 video:
+- Spatial prediction (9 intra modes)
+- 4×4 or 8×8 integer transform
+- Quantization → discrete tokens
+- Natural sequential ordering from prediction dependencies
+```
+
+**Advantages**:
+- ✅ Extremely optimized (hardware everywhere)
+- ✅ Spatial prediction modes = learned relationships
+- ✅ Natural ordering from prediction dependencies
+- ✅ Can extend to inter-frame prediction (video)
+
+**H.265/HEVC, AV1**:
+- More prediction modes (35+ for HEVC)
+- Better compression
+- Richer token vocabulary
+
+**For SSL**: Video codec prediction modes might teach better spatial relationships than JPEG. Natural path to video prediction.
+
+#### **6. Wavelet Transforms** (General)
+
+**Discrete Wavelet Transform (DWT)**:
+```
+1. Decompose into wavelets at multiple scales
+2. Coefficient hierarchy: LL, LH, HL, HH per level
+3. Quantize coefficients → discrete tokens
+4. Natural coarse-to-fine ordering
+```
+
+**Types**:
+- Haar wavelets (simplest)
+- Daubechies wavelets
+- Biorthogonal wavelets
+
+**Advantages**:
+- ✅ True multi-resolution
+- ✅ Better edge preservation than DCT
+- ✅ Natural hierarchical structure
+- ✅ Mathematically cleaner than DCT
+
+**Disadvantages**:
+- ❌ No standard image format (need custom)
+- ❌ Less hardware support
+
+**For SSL**: Excellent for multi-scale learning. Coarse-to-fine is explicit in the decomposition.
+
+#### **7. Learned Compression (Neural Codecs)**
+
+**Variational Autoencoders + Entropy Models**:
+```
+1. Neural encoder: image → latent
+2. Quantization
+3. Entropy model (context-adaptive)
+4. Neural decoder: latent → image
+```
+
+**Examples**:
+- Ballé et al. neural compression
+- Learned Image Compression (LIC)
+- VVC (Versatile Video Coding) with neural tools
+
+**Advantages**:
+- ✅ Can learn compression specifically for task
+- ✅ State-of-the-art rate-distortion
+- ✅ Flexible latent structure
+
+**Disadvantages**:
+- ❌ Requires training the codec itself
+- ❌ Slower than traditional codecs
+- ❌ Defeats purpose of "zero training" bootstrap
+
+**For SSL**: Best long-term but defeats quick prototyping. Similar to VQ-VAE approach.
+
+#### **8. Other Transform Domains**
+
+**Fourier Transform**:
+```
+- 2D FFT
+- Magnitude and phase
+- Low freq → high freq ordering
+```
+- Similar to DCT but whole-image
+- Less localized than DCT/wavelets
+
+**Hadamard Transform**:
+```
+- Integer-only transform
+- Very fast (no multiplications)
+- Used in some video codecs
+```
+- Simpler than DCT
+- Less compression but faster
+
+#### **Comparison Table: Compression Methods for Tokenization**
+
+| Method | Ordering Quality | Compression | Speed | Hardware | Complexity | Bootstrap Time |
+|--------|-----------------|-------------|-------|----------|------------|----------------|
+| **JPEG (DCT)** | ⭐⭐⭐⭐ Zigzag | Good | ⭐⭐⭐⭐⭐ | ✅ Yes | Low | Minutes |
+| **JPEG 2000 (DWT)** | ⭐⭐⭐⭐⭐ Multi-scale | Better | ⭐⭐⭐ | ⚠️ Partial | Medium | Minutes |
+| **WebP** | ⭐⭐⭐ Prediction | Better | ⭐⭐⭐⭐ | ⚠️ Partial | Medium | Minutes |
+| **AVIF** | ⭐⭐⭐⭐ Prediction | Best | ⭐⭐ | ❌ No | High | Minutes |
+| **H.264 I-frames** | ⭐⭐⭐⭐⭐ Prediction | Good | ⭐⭐⭐⭐⭐ | ✅ Yes | Medium | Minutes |
+| **Wavelets (custom)** | ⭐⭐⭐⭐⭐ Hierarchy | Variable | ⭐⭐⭐ | ❌ No | Medium | Hours (coding) |
+| **Neural Codec** | ⭐⭐⭐⭐⭐ Learned | Best | ⭐ | ❌ No | Very High | Weeks (training) |
+
+#### **Recommendations by Use Case**:
+
+1. **Quick Prototyping** (Days):
+   - **JPEG**: Best balance of speed, simplicity, hardware support
+   - **H.264 I-frames**: If you want prediction modes
+
+2. **Better Semantics** (Days-Week):
+   - **JPEG 2000**: Wavelet multi-scale, better edges
+   - **Wavelets (custom)**: Full control over decomposition
+
+3. **Path to Video** (Weeks):
+   - **H.264/H.265**: Start with I-frames, extend to P/B frames
+   - Natural progression to temporal prediction
+
+4. **Maximum Compression** (Weeks):
+   - **AVIF/AV1**: State-of-the-art, rich prediction modes
+   - **Neural codecs**: If willing to train
+
+5. **Research Exploration** (Ongoing):
+   - Try multiple: JPEG vs JPEG2000 vs Wavelet vs H.264
+   - Compare which learns better representations
+   - Ablation study on transform type
+
+#### **Hybrid Approaches**:
+
+**Multi-codec ensemble**:
+```
+1. Extract tokens from multiple codecs
+2. JPEG (DCT) + JPEG2000 (Wavelet) + H.264 (Prediction)
+3. Learn which codec tokens are most informative
+4. Ensemble or select per image region
+```
+
+**Progressive refinement**:
+```
+1. Start with JPEG quality 10 (coarse)
+2. Progressively add quality 20, 40, 80
+3. Learn to predict refinement deltas
+4. Natural curriculum from coarse to fine
+```
+
+#### **Key Insight**:
+
+The choice of compression codec determines:
+- **Token vocabulary** (DCT vs wavelet vs prediction modes)
+- **Ordering** (zigzag vs hierarchical vs prediction order)
+- **Semantics** (frequency vs spatial vs hybrid)
+
+JPEG is the practical default, but JPEG 2000 (wavelets) or H.264 I-frames (prediction) might learn better spatial relationships. Experimentation needed!
+
+**Verdict**: Aggressive JPEG is a practical, fast way to create discrete tokens with natural ordering. Excellent for rapid prototyping before investing in learned tokenizers like VQ-VAE.
+
 #### 7. **Attention-Based Dynamic Ordering** (Let model decide)
 ```
 Model learns which regions to predict next based on context
