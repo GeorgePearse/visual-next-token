@@ -4,7 +4,9 @@ Welcome to Visual Next Token! This project implements **curiosity-driven reinfor
 
 ## What is Visual Next Token?
 
-Visual Next Token explores how agents can learn to navigate images by seeking information-dense regions. The core insight: **an agent that maximizes prediction error (not accuracy) will naturally explore semantically meaningful paths** - from cars to roads to sky, following co-occurrence patterns in visual scenes.
+Visual Next Token explores how agents can learn to navigate images by seeking information-dense regions. The core insight: **using prediction error as a curiosity signal guides the agent to explore semantically meaningful paths** - from cars to roads to sky, following co-occurrence patterns in visual scenes.
+
+Like active learning: high prediction error indicates "I don't understand this transition yet" → worth exploring. As the agent learns, it moves to new informative regions.
 
 ## Key Features
 

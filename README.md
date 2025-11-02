@@ -8,14 +8,16 @@ Curiosity-driven reinforcement learning for learning semantic paths through imag
 
 ## Overview
 
-Visual Next Token implements a novel approach to image navigation where an agent learns to explore images by **maximizing prediction error** (not accuracy) in semantic feature space. This curiosity-driven approach forces the agent to seek information-dense regions, naturally following semantic co-occurrence patterns like car → road → sky.
+Visual Next Token implements a novel approach to image navigation where an agent learns to explore images using **prediction error as an intrinsic curiosity signal** in semantic feature space. This approach guides the agent to seek information-dense regions, naturally following semantic co-occurrence patterns like car → road → sky.
 
 ### Key Insight
 
-Traditional approaches predict **what** comes next. We flip this:
+Traditional approaches predict **what** comes next accurately. We use prediction error as an **information signal**:
 
-- ❌ **Traditional**: Maximize prediction accuracy → agent seeks boring, predictable regions
-- ✅ **Our approach**: Maximize prediction error → agent seeks surprising, information-dense regions
+- ❌ **Traditional**: Minimize prediction error → agent seeks boring, predictable regions (uniform sky)
+- ✅ **Our approach**: Use prediction error as curiosity signal → agent explores information-dense regions
+
+Like active learning: high prediction error indicates "I don't understand this transition yet" → worth exploring. As the forward model learns, error decreases and agent moves to new informative regions.
 
 ### The "Car Color Problem"
 

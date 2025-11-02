@@ -2,7 +2,7 @@
 
 ## Overview
 
-RL-based image navigation casts the problem of learning semantic paths through images as a **curiosity-driven reinforcement learning** task. An agent learns to navigate by maximizing prediction error in a learned semantic feature space.
+RL-based image navigation casts the problem of learning semantic paths through images as a **curiosity-driven reinforcement learning** task. An agent learns to navigate using prediction error as an intrinsic curiosity signal in a learned semantic feature space.
 
 ## The Core Idea
 
@@ -18,13 +18,15 @@ Reward = -||predicted_pixels - actual_pixels||²
 
 ### Our Approach ✅
 
-We flip the reward: **maximize prediction ERROR**:
+We use prediction error as a **curiosity signal** (intrinsic motivation):
 
 ```
 Reward = ||predicted_features - actual_features||²
 ```
 
-**Result:** Agent seeks surprising, information-dense regions!
+**Result:** Agent explores information-dense regions!
+
+Like active learning: high error = "I don't understand this transition yet" = worth exploring. As the forward model learns, agent moves to new informative regions.
 
 ## Why This Works
 
@@ -39,7 +41,7 @@ Consider navigating from a car:
 | Sky above | High | High (new context) |
 | Another car | High | High (co-occurrence pattern) |
 
-The agent learns that **high prediction error = interesting semantic transitions**.
+The agent follows **prediction error gradients toward semantically rich transitions**.
 
 ## The "Car Color Problem"
 
