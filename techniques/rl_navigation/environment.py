@@ -1,12 +1,13 @@
 """
 Image Navigation Environment
 
-MDP formulation for navigating through images to maximize prediction error
-of future semantic features.
+MDP formulation for navigating through images by maximizing rolling-window
+prediction accuracy of future semantic features.
 
 State: (position, visited_mask, local_features)
 Action: 8-connected movement directions
-Reward: Exponentially weighted prediction error of future positions
+Reward: Exponentially weighted prediction accuracy over future positions
+       (accuracy = negative prediction error; low error = high reward)
 """
 
 import numpy as np
@@ -17,9 +18,10 @@ class ImageNavigationEnv:
     """
     RL environment for learning to navigate images.
 
-    The agent learns to move through an image to maximize its ability to
-    predict future semantic features - leading it to explore information-dense
-    regions with high semantic co-occurrence (car → road + sky).
+    The agent learns to move through an image to maximize rolling-window
+    prediction accuracy - seeking paths where it can build predictive
+    understanding. High accuracy (low error) over future steps indicates
+    semantically coherent regions (e.g., car → car → car).
     """
 
     # 8-connected movement directions
@@ -198,10 +200,19 @@ class ImageNavigationEnv:
 
     def _compute_reward(self, prev_pos, action, current_pos):
         """
-        Compute intrinsic reward based on prediction error.
+        Compute intrinsic reward based on rolling-window prediction accuracy.
 
-        Reward = Σ exp(-λ·d) · ||predicted_features - actual_features||²
+        Reward = -Σ exp(-λ·d) · ||predicted_features - actual_features||²
                 + coverage_bonus
+
+        We maximize ACCURACY (minimize error). High rolling-window accuracy
+        indicates semantically coherent paths where the agent can build
+        predictive understanding.
+
+        Example: road → car edge
+          - Immediate: High error (color jump) → low immediate reward
+          - Future: Low error (car → car predictable) → high lookahead reward
+          - Net: Positive if future is coherent
 
         Args:
             prev_pos: Previous (row, col) position
@@ -225,47 +236,61 @@ class ImageNavigationEnv:
             action_tensor
         ).squeeze(0)
 
-        # Prediction error = intrinsic reward
+        # Compute prediction error (for diagnostics and reward)
         curr_features = self.patch_features[curr_patch[0], curr_patch[1]]
         prediction_error = torch.sum((predicted_features - curr_features) ** 2).item()
 
+        # CRITICAL: We reward ACCURACY (negative error), not error itself
+        # High error = low accuracy = low reward
+        # Low error = high accuracy = high reward
+        immediate_accuracy_reward = -prediction_error
+
         # Optional: Look ahead to future positions (exponentially weighted)
-        lookahead_reward = 0.0
+        lookahead_accuracy_reward = 0.0
         if self.reward_horizon > 1:
-            lookahead_reward = self._compute_lookahead_reward(current_pos)
+            lookahead_error = self._compute_lookahead_error(current_pos)
+            lookahead_accuracy_reward = -lookahead_error  # Negate: accuracy = -error
 
         # Coverage bonus: Encourage visiting new regions
         coverage_bonus = self.coverage_bonus_weight / np.sqrt(
             self.visit_count[current_pos] + 1e-8
         )
 
-        # Total reward
-        total_reward = prediction_error + lookahead_reward + coverage_bonus
+        # Total reward = maximize rolling-window accuracy + coverage
+        total_reward = immediate_accuracy_reward + lookahead_accuracy_reward + coverage_bonus
 
         reward_info = {
-            "prediction_error": prediction_error,
-            "lookahead_reward": lookahead_reward,
+            "prediction_error": prediction_error,  # Diagnostic only
+            "immediate_accuracy": immediate_accuracy_reward,
+            "lookahead_accuracy": lookahead_accuracy_reward,
             "coverage_bonus": coverage_bonus,
             "total": total_reward,
         }
 
         return total_reward, reward_info
 
-    def _compute_lookahead_reward(self, current_pos):
+    def _compute_lookahead_error(self, current_pos):
         """
-        Compute exponentially weighted prediction error for future positions.
+        Compute exponentially weighted prediction ERROR for future positions.
+
+        NOTE: This computes ERROR, which will be negated in _compute_reward()
+        to get accuracy reward. We keep it as error internally for clarity.
 
         Args:
             current_pos: Current (row, col) position
 
         Returns:
-            lookahead_reward: Weighted sum of future prediction errors
+            lookahead_error: Weighted sum of future prediction errors
+                            (will be negated to get accuracy reward)
         """
-        total_reward = 0.0
+        total_error = 0.0
         curr_patch = self._pos_to_patch(current_pos)
         curr_features = self.patch_features[curr_patch[0], curr_patch[1]]
 
         # Look ahead in all 8 directions
+        # NOTE: This uses single-step predictor for all distances, which is
+        # an approximation. Ideally we'd chain predictions for distance > 1,
+        # but this provides a useful signal about local coherence.
         for distance in range(1, self.reward_horizon):
             weight = np.exp(-self.reward_lambda * distance)
 
@@ -282,19 +307,21 @@ class ImageNavigationEnv:
                 future_patch = self._pos_to_patch((future_row, future_col))
                 future_features = self.patch_features[future_patch[0], future_patch[1]]
 
-                # Predict future features
+                # Predict future features from current position + action
+                # NOTE: For distance > 1, this is an approximation since the
+                # predictor is trained on single-step transitions
                 action_tensor = torch.tensor([action_id], device=self.device)
                 predicted_future = self.predictor(
                     curr_features.unsqueeze(0),
                     action_tensor
                 ).squeeze(0)
 
-                # Prediction error
+                # Prediction error (will be negated to accuracy in _compute_reward)
                 error = torch.sum((predicted_future - future_features) ** 2).item()
 
-                total_reward += weight * error
+                total_error += weight * error
 
-        return total_reward
+        return total_error
 
     def _pos_to_patch(self, pos):
         """Convert pixel position to patch position."""

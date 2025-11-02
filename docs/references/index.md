@@ -184,6 +184,102 @@ When citing our work or building upon it, please cite the relevant foundation pa
 
 See individual paper pages for full BibTeX.
 
+## Python RL Frameworks
+
+When implementing RL systems, you can choose from several mature frameworks. Here are the most popular:
+
+### Production-Ready Frameworks
+
+| Framework | Strengths | Use Case | Algorithms |
+|-----------|-----------|----------|------------|
+| **[Stable-Baselines3](https://github.com/DLR-RM/stable-baselines3)** | Easy to use, well-documented, PyTorch-based | Best for getting started, research | PPO, A2C, SAC, TD3, DQN |
+| **[Ray RLlib](https://docs.ray.io/en/latest/rllib/index.html)** | Distributed training, production-ready, scalable | Large-scale deployments | PPO, IMPALA, APPO, DQN, SAC |
+| **[CleanRL](https://github.com/vwxyzjn/cleanrl)** | Single-file implementations, highly readable | Learning RL, research, modifications | PPO, DQN, SAC, TD3 |
+| **[Tianshou](https://github.com/thu-ml/tianshou)** | Fast, modular, elegant API | Research, custom algorithms | PPO, SAC, DQN, DDPG, A2C |
+
+### Specialized Frameworks
+
+| Framework | Focus | Best For |
+|-----------|-------|----------|
+| **[Gymnasium](https://gymnasium.farama.org/)** | Environment interface (successor to OpenAI Gym) | Creating custom environments |
+| **[PettingZoo](https://pettingzoo.farama.org/)** | Multi-agent RL | Competitive/cooperative agents |
+| **[Sample Factory](https://github.com/alex-petrenko/sample-factory)** | High-throughput training | Very fast environments (games) |
+| **[RLlib Trainer](https://docs.ray.io/en/latest/rllib/index.html)** | Hyperparameter tuning at scale | Large experiments, tuning |
+
+### Our Implementation
+
+**Visual Next Token** uses a **custom PPO implementation** because:
+
+- ✅ Full control over gradient flow (detached features for policy)
+- ✅ Tight integration with DINOv2 encoder
+- ✅ Two-phase training (freeze → fine-tune encoder)
+- ✅ Custom reward computation (rolling-window accuracy)
+- ✅ Educational value (understand PPO internals)
+
+**If you want to use an existing framework**, here's how you'd adapt:
+
+#### Stable-Baselines3 Example
+
+```python
+from stable_baselines3 import PPO
+from stable_baselines3.common.env_util import make_vec_env
+import gymnasium as gym
+
+# 1. Wrap environment in Gymnasium interface
+class GymImageNavEnv(gym.Env):
+    def __init__(self, image, encoder, predictor):
+        self.env = ImageNavigationEnv(image, encoder, predictor)
+        self.observation_space = gym.spaces.Box(
+            low=-np.inf, high=np.inf,
+            shape=(encoder.feature_dim,),
+            dtype=np.float32
+        )
+        self.action_space = gym.spaces.Discrete(8)
+
+    def reset(self, seed=None):
+        state = self.env.reset()
+        return state["features"].cpu().numpy(), {}
+
+    def step(self, action):
+        next_state, reward, done, info = self.env.step(action)
+        return next_state["features"].cpu().numpy(), reward, done, False, info
+
+# 2. Train with SB3
+env = GymImageNavEnv(image, encoder, predictor)
+model = PPO("MlpPolicy", env, verbose=1, learning_rate=3e-4)
+model.learn(total_timesteps=100000)
+```
+
+#### CleanRL Example
+
+CleanRL's single-file implementations are excellent for understanding and modifying algorithms. You could adapt [cleanrl/ppo.py](https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/ppo.py) by:
+
+1. Replacing environment with `ImageNavigationEnv`
+2. Modifying reward computation for rolling-window accuracy
+3. Adding two-phase training logic
+
+### Choosing a Framework
+
+**Use Stable-Baselines3 if**:
+- You want quick experiments with standard algorithms
+- You need reliable, battle-tested implementations
+- Documentation and community support are important
+
+**Use CleanRL if**:
+- You want to understand algorithm internals
+- You plan to modify or extend algorithms
+- You prefer minimal dependencies
+
+**Use Ray RLlib if**:
+- You need distributed training across many machines
+- You're running hyperparameter sweeps
+- You're deploying to production
+
+**Use Custom Implementation (like ours) if**:
+- You need tight integration with custom components
+- You want full control over training dynamics
+- You're doing research on novel RL methods
+
 ## Next Steps
 
 <div class="grid cards" markdown>

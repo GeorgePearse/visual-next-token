@@ -1,11 +1,13 @@
 """
 Forward Dynamics Model & Intrinsic Motivation
 
-Two approaches for generating intrinsic rewards:
+Two approaches for generating intrinsic signals:
 1. Forward Dynamics Model (ICM): Predict next features from current + action
 2. Random Network Distillation (RND): Predict fixed random network output
 
-Both reward prediction ERROR, encouraging agent to seek novel, informative regions.
+These models compute prediction ERROR, which is then NEGATED in the environment
+to create accuracy-based rewards. The agent maximizes rolling-window prediction
+accuracy (low error = high reward), seeking semantically coherent paths.
 """
 
 import torch
@@ -18,7 +20,10 @@ class ForwardDynamicsModel(nn.Module):
     Forward dynamics model for Intrinsic Curiosity Module (ICM).
 
     Predicts next semantic features given current features and action.
-    Prediction error = intrinsic reward (agent seeks surprising regions).
+
+    NOTE: This model outputs PREDICTION ERROR, which the environment then
+    NEGATES to create accuracy rewards (low error = high reward). The agent
+    seeks paths with high rolling-window prediction accuracy.
 
     Architecture:
         Input: concat(features_t, action_onehot) → MLP → predicted_features_t+1
@@ -71,7 +76,10 @@ class ForwardDynamicsModel(nn.Module):
 
     def compute_intrinsic_reward(self, features_t, action, features_t1):
         """
-        Compute intrinsic reward as prediction error.
+        Compute prediction error for intrinsic motivation.
+
+        NOTE: Returns PREDICTION ERROR, not reward. The environment negates
+        this to create accuracy rewards (reward = -error).
 
         Args:
             features_t: Current features (batch_size, feature_dim)
@@ -79,7 +87,8 @@ class ForwardDynamicsModel(nn.Module):
             features_t1: Actual next features (batch_size, feature_dim)
 
         Returns:
-            reward: Prediction error (batch_size,)
+            prediction_error: Squared prediction error (batch_size,)
+                             Will be negated by environment for reward
         """
         # Predict next features
         predicted_features = self.forward(features_t, action)
@@ -122,7 +131,11 @@ class RNDIntrinsicMotivation(nn.Module):
 
     More stable than forward dynamics - avoids "noisy TV" problem.
     Uses fixed random target network that predictor learns to match.
-    Prediction error on novel states = high reward.
+
+    NOTE: Returns prediction ERROR which is negated by the environment to
+    create accuracy rewards. Novel states have high error → low reward,
+    familiar states have low error → high reward. This encourages finding
+    semantically coherent paths.
 
     Reference: "Exploration by Random Network Distillation" (Burda et al., 2018)
     """
@@ -182,16 +195,23 @@ class RNDIntrinsicMotivation(nn.Module):
 
     def compute_intrinsic_reward(self, features):
         """
-        Compute intrinsic reward as prediction error.
+        Compute prediction error for intrinsic motivation.
 
-        Novel states → large error → high reward
-        Familiar states → small error → low reward
+        NOTE: Returns PREDICTION ERROR, not reward. The environment negates
+        this to create accuracy rewards (reward = -error).
+
+        After negation by environment:
+        - Novel states → large error → LOW reward (penalized)
+        - Familiar states → small error → HIGH reward (encouraged)
+
+        This encourages semantically coherent paths where prediction is easy.
 
         Args:
             features: Semantic features (batch_size, feature_dim)
 
         Returns:
-            reward: Prediction error (batch_size,)
+            prediction_error: Squared prediction error (batch_size,)
+                             Will be negated by environment for reward
         """
         target_output, predictor_output = self.forward(features)
 

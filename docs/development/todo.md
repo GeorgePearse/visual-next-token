@@ -62,31 +62,51 @@ This page tracks the development status of Visual Next Token, including complete
 
 ### Critical Features
 
-#### 1. Reward Mechanism Alignment
-**Status**: Documentation updated, code needs review
-**Priority**: High
-**Description**: Ensure the reward computation correctly implements rolling-window prediction accuracy, not just prediction error.
+#### 1. Reward Mechanism Alignment ✅ **FIXED** (2025-11-02)
+**Status**: Complete - code now matches documentation
+**Priority**: High (RESOLVED)
+**Description**: Ensured reward computation correctly implements rolling-window prediction accuracy.
 
-**Files to review**:
-- `techniques/rl_navigation/environment.py` (lines 150-250)
-- `techniques/rl_navigation/forward_dynamics.py`
+**Issue Found**:
+The code was rewarding PREDICTION ERROR (high error = high reward), which contradicts the documented rolling-window accuracy framing. This encouraged seeking surprising/chaotic regions rather than semantically coherent paths.
 
-**Current implementation**:
+**Previous implementation**:
 ```python
-# environment.py:_compute_lookahead_reward
-def _compute_lookahead_reward(self, current_pos):
-    total_reward = 0.0
-    for distance in range(1, self.reward_horizon):
-        weight = np.exp(-self.reward_lambda * distance)
-        # Currently: prediction error
-        # Should verify: rolling-window accuracy
+# environment.py:_compute_reward (OLD)
+prediction_error = torch.sum((predicted - actual) ** 2).item()
+total_reward = prediction_error + lookahead_reward + coverage_bonus  # ❌ Maximizes error!
 ```
 
-**Action items**:
-- [ ] Verify lookahead reward implements rolling-window accuracy
-- [ ] Consider inverting sign if currently using error (make it accuracy-based)
-- [ ] Add comprehensive comments explaining the rolling-window framing
-- [ ] Update variable names to reflect accuracy vs error
+**Fixed implementation**:
+```python
+# environment.py:_compute_reward (NEW)
+prediction_error = torch.sum((predicted - actual) ** 2).item()
+immediate_accuracy_reward = -prediction_error  # ✅ Negate: accuracy = -error
+lookahead_accuracy_reward = -lookahead_error   # ✅ Negate lookahead too
+total_reward = immediate_accuracy_reward + lookahead_accuracy_reward + coverage_bonus
+```
+
+**Changes made**:
+- [x] ~~Verified lookahead reward implements rolling-window accuracy~~ → **FIXED**: Now negates error
+- [x] ~~Inverted sign to make accuracy-based~~ → **DONE**: `reward = -error`
+- [x] ~~Added comprehensive comments~~ → **DONE**: Documented rolling-window framing throughout
+- [x] ~~Updated variable names~~ → **DONE**: `immediate_accuracy_reward`, `lookahead_accuracy_reward`
+- [x] Renamed `_compute_lookahead_reward()` → `_compute_lookahead_error()` for clarity
+- [x] Updated all docstrings in `environment.py` and `forward_dynamics.py`
+- [x] Added car edge example in reward computation docstring
+
+**Files modified**:
+- `techniques/rl_navigation/environment.py` (lines 1-325)
+- `techniques/rl_navigation/forward_dynamics.py` (lines 1-220)
+
+**Impact**:
+This is a **CRITICAL** fix that fundamentally changes agent behavior:
+- **OLD**: Agent seeks high-error (surprising) transitions → chaotic/noisy regions
+- **NEW**: Agent seeks low-error (predictable) paths → semantically coherent regions
+
+**Next steps**:
+- Run experiments with fixed reward to validate behavior change
+- Compare learned paths before/after fix (expect more semantic coherence)
 
 #### 2. Testing Infrastructure
 **Status**: Not started
@@ -364,7 +384,22 @@ _None currently identified_
 
 ## 🔄 Changelog
 
-### 2025-11-02
+### 2025-11-02 (Evening Session)
+- ✅ **CRITICAL FIX: Reward mechanism alignment**
+  - Fixed code to match documented rolling-window accuracy framing
+  - Changed from maximizing error to maximizing accuracy (negated error)
+  - Updated `environment.py`: `reward = -error` instead of `reward = error`
+  - Renamed `_compute_lookahead_reward()` → `_compute_lookahead_error()`
+  - Updated all docstrings and comments in `environment.py` and `forward_dynamics.py`
+  - Added car edge example in reward computation documentation
+  - This fundamentally changes agent behavior: seeks coherent paths, not chaotic regions
+- ✅ **Added Python RL frameworks reference** to `docs/references/index.md`
+  - Production frameworks: Stable-Baselines3, Ray RLlib, CleanRL, Tianshou
+  - Specialized frameworks: Gymnasium, PettingZoo, Sample Factory
+  - Integration examples showing how to use SB3 with our environment
+  - Guidance on choosing the right framework
+
+### 2025-11-02 (Earlier)
 - ✅ Created comprehensive TODO list
 - ✅ Identified reward mechanism review as high priority
 - ✅ Documented completed RL navigation implementation
