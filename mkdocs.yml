@@ -1,0 +1,80 @@
+site_name: Image SSL - Self-Supervised Learning for Images
+site_description: Research implementation of self-supervised learning techniques for image understanding
+site_author: George Pearse
+repo_url: https://github.com/georgepearse/image-ssl
+repo_name: georgepearse/image-ssl
+
+theme:
+  name: material
+  palette:
+    # Light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    # Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.arithmatex:
+      generic: true
+  - tables
+  - attr_list
+  - md_in_html
+  - toc:
+      permalink: true
+
+plugins:
+  - search
+
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quickstart.md
+  - Techniques:
+      - RL Navigation:
+          - Introduction: techniques/rl_navigation/index.md
+  - References:
+      - Papers Overview: references/index.md
+      - RL Navigation Papers:
+          - ICM (Curiosity): references/rl_navigation/01_curiosity_driven_exploration_ICM.md
+          - RND: references/rl_navigation/02_random_network_distillation_RND.md
+          - PPO: references/rl_navigation/03_proximal_policy_optimization_PPO.md
+          - DINOv2: references/rl_navigation/04_dinov2_visual_features.md
+          - GAE: references/rl_navigation/05_generalized_advantage_estimation_GAE.md
