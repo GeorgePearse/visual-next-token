@@ -593,7 +593,308 @@ JPEG is the practical default, but JPEG 2000 (wavelets) or H.264 I-frames (predi
 
 **Verdict**: Aggressive JPEG is a practical, fast way to create discrete tokens with natural ordering. Excellent for rapid prototyping before investing in learned tokenizers like VQ-VAE.
 
-#### 7. **Attention-Based Dynamic Ordering** (Let model decide)
+#### 7. **Gradient-Based Adaptive Walk** (Content-aware traversal) 🔥 NEW!
+
+**Key Insight**: Let image content determine the traversal order through gradient-based navigation!
+
+**Concept: Visual Gradient Walk**
+
+```python
+# Walk that follows gradients (most change)
+current_position = start_point
+predicted_sequence = []
+
+while not_all_visited:
+    # Predict current pixel/patch
+    prediction = predict(current_position, context=predicted_sequence)
+    predicted_sequence.append(prediction)
+
+    # Move in direction of maximum gradient
+    gradient_map = compute_gradients(image)
+    next_position = argmax(gradient_map[neighbors(current_position)])
+    current_position = next_position
+```
+
+**Two Variants**:
+
+**A) Maximum Gradient Walk** (Follow edges/boundaries):
+```
+Start → Move to neighbor with highest gradient magnitude
+Result: Walk follows edges, object boundaries, salient features
+Order: Background → Edges → Details
+```
+
+**B) Minimum Gradient Walk** (Follow smooth regions):
+```
+Start → Move to neighbor with lowest gradient magnitude
+Result: Walk follows homogeneous regions first
+Order: Smooth areas → Gradual transitions → Edges
+```
+
+**Why This is Powerful**:
+
+1. **Content-Aware**: Ordering adapts to actual image structure
+2. **Mimics Human Vision**: Similar to saccadic eye movements (we look at high-contrast regions)
+3. **Semantic**: Edges/boundaries often correspond to object boundaries
+4. **Natural**: Follows perceptual saliency
+5. **Learnable**: Model can learn optimal gradient-following policy
+
+**Implementation Strategies**:
+
+**Option 1: Fixed Gradient Walk** (Hand-crafted)
+```python
+def gradient_walk_ordering(image):
+    """Create pixel ordering by following gradients"""
+    # Compute image gradients (Sobel, Scharr, etc.)
+    grad_x = sobel_x(image)
+    grad_y = sobel_y(image)
+    gradient_magnitude = sqrt(grad_x**2 + grad_y**2)
+
+    # Start from center (or lowest gradient point)
+    current = image_center
+    visited = set()
+    ordering = []
+
+    while len(visited) < num_pixels:
+        ordering.append(current)
+        visited.add(current)
+
+        # Get unvisited neighbors
+        neighbors = get_neighbors(current, visited)
+
+        # Move to neighbor with max gradient (edge-following)
+        next_pos = max(neighbors, key=lambda p: gradient_magnitude[p])
+        current = next_pos
+
+    return ordering
+```
+
+**Option 2: Learned Walk Policy** (Reinforcement Learning)
+```python
+def learned_walk_policy(image, policy_network):
+    """Learn optimal walk policy for prediction"""
+    current = start_position
+    ordering = []
+
+    while not_done:
+        # Policy network decides where to go next
+        # Based on: current position, image features, prediction difficulty
+        features = extract_features(image, current, ordering)
+        next_direction = policy_network(features)
+
+        current = move(current, next_direction)
+        ordering.append(current)
+
+    return ordering
+```
+
+**Option 3: Multi-Scale Gradient Walk**
+```python
+# Walk at multiple scales simultaneously
+coarse_walk = gradient_walk(downsample(image, 8x))  # 8x8 regions
+medium_walk = gradient_walk(downsample(image, 4x))  # 4x4 regions
+fine_walk = gradient_walk(image)                    # Pixels
+
+# Hierarchical: Coarse regions → Medium → Fine within each region
+```
+
+**Gradient Computation Options**:
+
+1. **Spatial Gradients** (Standard):
+   - Sobel, Scharr, Prewitt operators
+   - Edge magnitude and direction
+
+2. **Perceptual Gradients**:
+   - Difference in learned features (CNN layer activations)
+   - Semantic boundaries rather than just intensity
+
+3. **Prediction Difficulty Gradients**:
+   - Estimate how hard each region is to predict
+   - Walk from easy → hard or hard → easy
+
+4. **Saliency-Based Gradients**:
+   - Use saliency maps (attention models)
+   - Walk follows visual importance
+
+**Analogies to Human Vision**:
+
+```
+Human Eye Movements:
+1. Saccades: Jump to salient regions (high gradient)
+2. Fixations: Predict/process local region
+3. Smooth pursuit: Follow moving edges
+
+Our Gradient Walk:
+1. Move to high-gradient regions (edges, objects)
+2. Predict at current position
+3. Continue along boundaries/features
+```
+
+**Advantages**:
+
+- ✅ **Content-aware ordering**: Not arbitrary like raster
+- ✅ **Semantic**: Follows object boundaries naturally
+- ✅ **Adaptive**: Different path for each image
+- ✅ **Perceptually motivated**: Mimics visual attention
+- ✅ **Edge-aware**: Natural for object-centric learning
+- ✅ **Can be learned**: Policy network optimizes for predictability
+
+**Challenges**:
+
+- ❌ **Non-deterministic**: Different ordering per image (harder to batch?)
+- ❌ **Connectivity**: How to handle disconnected regions?
+- ❌ **Starting point**: Where to begin the walk?
+- ❌ **Backtracking**: What if walk gets stuck?
+- ❌ **Computational cost**: Need to compute gradients first
+
+**Advanced Variants**:
+
+**1. Bidirectional Gradient Walk**:
+```
+Two simultaneous walks:
+- Walk A: Follows maximum gradients (edges)
+- Walk B: Follows minimum gradients (smooth regions)
+- Predict: Can one walk predict the other's path?
+```
+
+**2. Gradient-Guided Superpixel Ordering**:
+```
+1. Segment into superpixels (SAM)
+2. Compute gradient between adjacent superpixels
+3. Walk through superpixels following boundary strength
+4. Predict each superpixel in traversal order
+```
+
+**3. Curriculum: Smooth → Edges**:
+```
+Epoch 1: Walk follows minimum gradients (easy, smooth regions)
+Epoch 2: Walk follows medium gradients (moderate difficulty)
+Epoch 3: Walk follows maximum gradients (hard, edges/details)
+
+Progressive difficulty like coarse-to-fine
+```
+
+**4. Multi-Agent Walks**:
+```
+Launch multiple walkers from different starting points:
+- Walker 1: From top-left, follows edges
+- Walker 2: From center, follows saliency
+- Walker 3: From brightest region, follows brightness
+- Predict: When/where will walkers meet?
+```
+
+**Research Questions**:
+
+1. **Max vs Min Gradients**: Which learns better representations?
+   - Max: Focuses on edges, boundaries (harder to predict)
+   - Min: Focuses on smooth regions (easier to predict)
+
+2. **Starting Point**: Where to begin?
+   - Center (saliency-weighted center)
+   - Random (different each time)
+   - Lowest gradient (easiest first)
+   - Highest gradient (hardest first)
+
+3. **Walk Strategy**:
+   - Greedy (always max gradient)
+   - Epsilon-greedy (explore vs exploit)
+   - Learned policy (RL agent)
+
+4. **Prediction Task**:
+   - Predict pixel/patch values
+   - Predict gradient magnitude at next position
+   - Predict optimal next direction
+   - Predict full remaining path
+
+**Comparison to Other Methods**:
+
+| Aspect | Raster | Coarse-Fine | Gradient Walk |
+|--------|--------|-------------|---------------|
+| Ordering | Fixed | Fixed | Adaptive |
+| Content-aware | ❌ No | ⚠️ Partial | ✅ Yes |
+| Per-image | Same | Same | Unique |
+| Semantic | ❌ No | ⚠️ Scale | ✅ Boundaries |
+| Complexity | Low | Medium | High |
+
+**Practical Implementation** (Hybrid approach):
+
+```python
+class GradientWalkTokenizer:
+    def __init__(self, walk_type='max_gradient'):
+        self.walk_type = walk_type
+
+    def compute_ordering(self, image):
+        """Determine pixel ordering via gradient walk"""
+        if self.walk_type == 'max_gradient':
+            return self.max_gradient_walk(image)
+        elif self.walk_type == 'min_gradient':
+            return self.min_gradient_walk(image)
+        else:
+            return self.learned_walk(image)
+
+    def max_gradient_walk(self, image):
+        gradients = compute_sobel(image)
+        # Start from center
+        current = (H//2, W//2)
+        ordering = []
+        visited = set()
+
+        while len(visited) < H * W:
+            ordering.append(current)
+            visited.add(current)
+
+            # 8-connected neighbors
+            neighbors = [(current[0]+dy, current[1]+dx)
+                        for dy, dx in [(-1,-1),(-1,0),(-1,1),
+                                       (0,-1),(0,1),
+                                       (1,-1),(1,0),(1,1)]]
+            neighbors = [n for n in neighbors if n not in visited]
+
+            if not neighbors:
+                # Stuck! Jump to unvisited pixel with max gradient
+                unvisited = [(i,j) for i in range(H) for j in range(W)
+                           if (i,j) not in visited]
+                current = max(unvisited, key=lambda p: gradients[p])
+            else:
+                # Move to neighbor with max gradient
+                current = max(neighbors, key=lambda p: gradients[p])
+
+        return ordering
+
+    def tokenize(self, image):
+        """Convert image to sequence via gradient walk"""
+        ordering = self.compute_ordering(image)
+        # Extract pixels/patches in walk order
+        return [image[pos] for pos in ordering]
+```
+
+**Combining with Video**:
+
+```python
+# Temporal + Spatial gradient walk
+for frame in video:
+    # Spatial walk within frame
+    spatial_ordering = gradient_walk(frame)
+
+    # Predict along spatial walk
+    for position in spatial_ordering:
+        predict(position | previous_positions + previous_frames)
+
+    # Temporal walk: Track high-gradient regions across frames
+    # Edges moving through time = object motion
+```
+
+**Why This Could Be VERY Powerful**:
+
+1. **Learning object boundaries**: Max gradient walk naturally follows edges
+2. **Saliency-based**: Mimics where humans look
+3. **Adaptive**: Each image gets optimal traversal
+4. **Compositional**: Can combine spatial gradient walk + temporal prediction
+5. **Learnable policy**: Can optimize walk strategy for downstream tasks
+
+**Verdict**: Gradient-based walks are a novel, perceptually-motivated approach to creating content-aware sequential orderings. Could be superior to arbitrary raster ordering. Worthy of research exploration!
+
+#### 8. **Attention-Based Dynamic Ordering** (Let model decide)
 ```
 Model learns which regions to predict next based on context
 ```
@@ -620,26 +921,28 @@ Randomly mask tokens, predict them from unmasked context
 
 ### Comparative Analysis
 
-| Approach | Sequential? | Semantic? | Efficient? | Natural Order? | Like Next Token? | Training Cost |
-|----------|-------------|-----------|------------|----------------|------------------|---------------|
-| Raster order | ✅ Yes | ❌ No | ❌ Slow | ❌ No | ⭐⭐ Somewhat | Medium |
-| Coarse-to-fine | ✅ Yes | ⚠️ Partial | ✅ Better | ⚠️ Partial | ⭐⭐⭐ Good | Medium |
-| Superpixel sequence | ✅ Yes | ✅ Yes | ⚠️ Medium | ⚠️ Depends | ⭐⭐⭐ Good | High |
-| **Video frames** | ✅ **Yes** | ✅ **Yes** | ✅ **Good** | ✅ **Yes!** | ⭐⭐⭐⭐⭐ **Best!** | High |
-| Patch autoregressive | ✅ Yes | ⚠️ Partial | ✅ Good | ❌ No | ⭐⭐⭐ Good | Medium |
-| Latent autoregressive | ✅ Yes | ✅ Yes | ✅ Good | ❌ No | ⭐⭐⭐⭐ Great | Very High |
-| **Aggressive JPEG** | ✅ **Yes** | ⚠️ **Freq** | ✅ **Great** | ✅ **Yes!** | ⭐⭐⭐⭐ **Great** | **None!** |
-| Masked prediction | ❌ No | ✅ Yes | ✅ Great | N/A | ⭐⭐ Different | Medium |
+| Approach | Sequential? | Semantic? | Efficient? | Natural Order? | Like Next Token? | Training Cost | Content-Aware? |
+|----------|-------------|-----------|------------|----------------|------------------|---------------|----------------|
+| Raster order | ✅ Yes | ❌ No | ❌ Slow | ❌ No | ⭐⭐ Somewhat | Medium | ❌ No |
+| Coarse-to-fine | ✅ Yes | ⚠️ Partial | ✅ Better | ⚠️ Partial | ⭐⭐⭐ Good | Medium | ❌ No |
+| Superpixel sequence | ✅ Yes | ✅ Yes | ⚠️ Medium | ⚠️ Depends | ⭐⭐⭐ Good | High | ⚠️ Partial |
+| **Video frames** | ✅ **Yes** | ✅ **Yes** | ✅ **Good** | ✅ **Yes!** | ⭐⭐⭐⭐⭐ **Best!** | High | ⚠️ **Temporal** |
+| Patch autoregressive | ✅ Yes | ⚠️ Partial | ✅ Good | ❌ No | ⭐⭐⭐ Good | Medium | ❌ No |
+| Latent autoregressive | ✅ Yes | ✅ Yes | ✅ Good | ❌ No | ⭐⭐⭐⭐ Great | Very High | ❌ No |
+| **Aggressive JPEG** | ✅ **Yes** | ⚠️ **Freq** | ✅ **Great** | ✅ **Yes!** | ⭐⭐⭐⭐ **Great** | **None!** | ❌ No |
+| **Gradient walk** 🔥 | ✅ **Yes** | ✅ **Yes!** | ⚠️ **Medium** | ✅ **Yes!** | ⭐⭐⭐⭐ **Great** | Low-Medium | ✅ **Yes!** |
+| Masked prediction | ❌ No | ✅ Yes | ✅ Great | N/A | ⭐⭐ Different | Medium | ❌ No |
 
 **Key Advantages by Approach**:
 - **Video frames**: Most natural, temporal causality, but needs video data
+- **Gradient walk**: Content-aware, mimics human vision, perceptually motivated! NEW!
 - **Latent autoregressive**: Semantic tokens, proven at scale, but two-stage training
 - **Aggressive JPEG**: Zero training, natural frequency ordering, fast prototyping
 - **Masked prediction**: Not truly sequential but very effective in practice
 
 ### Recommendations: Practical Roadmap
 
-#### **Tier 1: Quick Start with Aggressive JPEG** 💡 (Days to implement)
+#### **Tier 1A: Quick Start with Aggressive JPEG** 💡 (Days to implement)
 
 **Best for rapid prototyping and validation:**
 
@@ -657,6 +960,26 @@ Randomly mask tokens, predict them from unmasked context
 - ✅ Hardware-accelerated compression
 - ✅ Validates "next token prediction" approach quickly
 - ✅ Can iterate to learned tokenizers later
+
+#### **Tier 1B: Gradient Walk Exploration** 🔥 (Days-Week to implement)
+
+**Novel content-aware approach:**
+
+```python
+# Content-driven ordering!
+1. Compute image gradients (Sobel)
+2. Walk through image following max/min gradients
+3. Predict tokens in walk order
+4. Learns edge-following, mimics human visual attention
+```
+
+**Why explore this**:
+- ✅ Content-aware ordering (not arbitrary!)
+- ✅ Mimics saccadic eye movements
+- ✅ Naturally follows object boundaries
+- ✅ Can combine with superpixels (gradient-guided SAM)
+- ✅ Low training cost (simple gradient computation)
+- ✅ Could be superior to raster/fixed orderings
 
 #### **Tier 2: Best Long-term - Multi-Scale Video Frame Prediction** ⭐⭐⭐⭐⭐ (Weeks-Months)
 
