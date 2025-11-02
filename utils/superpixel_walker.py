@@ -79,32 +79,38 @@ then walks through superpixels in various orders.
 - **For irregular/natural**: Felzenszwalb or QuickShift
 """
 
-import numpy as np
-from typing import List, Tuple, Dict, Optional
 from dataclasses import dataclass
+
 import cv2
-from skimage.segmentation import slic, felzenszwalb, quickshift
-from skimage.measure import regionprops
-from scipy.spatial import distance
 import networkx as nx
+import numpy as np
+from scipy.spatial import distance
+from skimage.measure import regionprops
+from skimage.segmentation import felzenszwalb, quickshift, slic
 
 
 @dataclass
 class Superpixel:
     """Information about a single superpixel."""
+
     id: int
     mask: np.ndarray  # Boolean mask
-    center: Tuple[int, int]  # Centroid (row, col)
+    center: tuple[int, int]  # Centroid (row, col)
     area: int  # Number of pixels
     mean_color: np.ndarray  # Average RGB color
-    bounding_box: Tuple[int, int, int, int]  # (min_row, min_col, max_row, max_col)
+    bounding_box: tuple[int, int, int, int]  # (min_row, min_col, max_row, max_col)
 
 
 class SuperpixelWalker:
     """Walk through image at superpixel level."""
 
-    def __init__(self, image: np.ndarray, method: str = 'slic',
-                 n_segments: int = 100, compactness: float = 10.0):
+    def __init__(
+        self,
+        image: np.ndarray,
+        method: str = "slic",
+        n_segments: int = 100,
+        compactness: float = 10.0,
+    ):
         """
         Args:
             image: Input image (H, W, C) or (H, W)
@@ -123,21 +129,22 @@ class SuperpixelWalker:
 
     def _segment_image(self) -> np.ndarray:
         """Segment image into superpixels."""
-        from skimage.segmentation import watershed
-        from skimage.feature import peak_local_max
         from scipy import ndimage as ndi
+        from skimage.feature import peak_local_max
+        from skimage.segmentation import watershed
 
-        if self.method == 'slic':
-            segments = slic(self.image, n_segments=self.n_segments,
-                          compactness=self.compactness, start_label=0)
+        if self.method == "slic":
+            segments = slic(
+                self.image, n_segments=self.n_segments, compactness=self.compactness, start_label=0
+            )
 
-        elif self.method == 'felzenszwalb':
+        elif self.method == "felzenszwalb":
             segments = felzenszwalb(self.image, scale=100, sigma=0.5, min_size=50)
 
-        elif self.method == 'quickshift':
+        elif self.method == "quickshift":
             segments = quickshift(self.image, kernel_size=3, max_dist=6, ratio=0.5)
 
-        elif self.method == 'watershed':
+        elif self.method == "watershed":
             # Convert to grayscale if needed
             if len(self.image.shape) == 3:
                 gray = cv2.cvtColor(self.image.astype(np.uint8), cv2.COLOR_RGB2GRAY)
@@ -150,8 +157,9 @@ class SuperpixelWalker:
             distance = ndi.distance_transform_edt(thresh)
 
             # Find peaks (markers)
-            coords = peak_local_max(distance, min_distance=20, labels=thresh,
-                                  num_peaks=self.n_segments)
+            coords = peak_local_max(
+                distance, min_distance=20, labels=thresh, num_peaks=self.n_segments
+            )
             mask = np.zeros(distance.shape, dtype=bool)
             mask[tuple(coords.T)] = True
             markers, _ = ndi.label(mask)
@@ -165,11 +173,13 @@ class SuperpixelWalker:
 
         return segments
 
-    def _extract_superpixels(self) -> Dict[int, Superpixel]:
+    def _extract_superpixels(self) -> dict[int, Superpixel]:
         """Extract superpixel properties."""
         superpixels = {}
 
-        for region in regionprops(self.segments + 1):  # +1 because regionprops expects labels starting at 1
+        for region in regionprops(
+            self.segments + 1
+        ):  # +1 because regionprops expects labels starting at 1
             sp_id = region.label - 1
 
             # Create mask
@@ -182,10 +192,9 @@ class SuperpixelWalker:
 
             # Mean color
             if len(self.image.shape) == 3:
-                mean_color = np.array([
-                    self.image[:, :, c][mask].mean()
-                    for c in range(self.image.shape[2])
-                ])
+                mean_color = np.array(
+                    [self.image[:, :, c][mask].mean() for c in range(self.image.shape[2])]
+                )
             else:
                 mean_color = np.array([self.image[mask].mean()])
 
@@ -195,7 +204,7 @@ class SuperpixelWalker:
                 center=center,
                 area=area,
                 mean_color=mean_color,
-                bounding_box=bbox
+                bounding_box=bbox,
             )
 
         return superpixels
@@ -236,7 +245,7 @@ class SuperpixelWalker:
 
         return G
 
-    def walk_by_size(self, largest_first: bool = True) -> List[int]:
+    def walk_by_size(self, largest_first: bool = True) -> list[int]:
         """
         Order superpixels by size.
 
@@ -250,24 +259,20 @@ class SuperpixelWalker:
         sizes.sort(key=lambda x: x[1], reverse=largest_first)
         return [sp_id for sp_id, _ in sizes]
 
-    def walk_by_brightness(self, brightest_first: bool = True) -> List[int]:
+    def walk_by_brightness(self, brightest_first: bool = True) -> list[int]:
         """Order superpixels by brightness."""
-        brightnesses = [
-            (sp.id, sp.mean_color.sum())
-            for sp in self.superpixels.values()
-        ]
+        brightnesses = [(sp.id, sp.mean_color.sum()) for sp in self.superpixels.values()]
         brightnesses.sort(key=lambda x: x[1], reverse=brightest_first)
         return [sp_id for sp_id, _ in brightnesses]
 
-    def walk_by_color_variance(self, highest_first: bool = True) -> List[int]:
+    def walk_by_color_variance(self, highest_first: bool = True) -> list[int]:
         """Order superpixels by color variance (uniformity)."""
         variances = []
         for sp in self.superpixels.values():
             if len(self.image.shape) == 3:
-                var = np.array([
-                    self.image[:, :, c][sp.mask].var()
-                    for c in range(self.image.shape[2])
-                ]).mean()
+                var = np.array(
+                    [self.image[:, :, c][sp.mask].var() for c in range(self.image.shape[2])]
+                ).mean()
             else:
                 var = self.image[sp.mask].var()
             variances.append((sp.id, var))
@@ -275,7 +280,7 @@ class SuperpixelWalker:
         variances.sort(key=lambda x: x[1], reverse=highest_first)
         return [sp_id for sp_id, _ in variances]
 
-    def walk_by_position(self, start_corner: str = 'top-left') -> List[int]:
+    def walk_by_position(self, start_corner: str = "top-left") -> list[int]:
         """
         Order superpixels by spatial position.
 
@@ -284,27 +289,26 @@ class SuperpixelWalker:
         """
         h, w = self.image.shape[:2]
 
-        if start_corner == 'top-left':
+        if start_corner == "top-left":
             reference = (0, 0)
-        elif start_corner == 'top-right':
+        elif start_corner == "top-right":
             reference = (0, w)
-        elif start_corner == 'bottom-left':
+        elif start_corner == "bottom-left":
             reference = (h, 0)
-        elif start_corner == 'bottom-right':
+        elif start_corner == "bottom-right":
             reference = (h, w)
-        elif start_corner == 'center':
+        elif start_corner == "center":
             reference = (h // 2, w // 2)
         else:
             raise ValueError(f"Unknown corner: {start_corner}")
 
         distances = [
-            (sp.id, distance.euclidean(sp.center, reference))
-            for sp in self.superpixels.values()
+            (sp.id, distance.euclidean(sp.center, reference)) for sp in self.superpixels.values()
         ]
         distances.sort(key=lambda x: x[1])
         return [sp_id for sp_id, _ in distances]
 
-    def walk_by_gradient(self, maximize: bool = True) -> List[int]:
+    def walk_by_gradient(self, maximize: bool = True) -> list[int]:
         """Order superpixels by gradient magnitude at boundaries."""
         from scipy import ndimage
 
@@ -335,8 +339,9 @@ class SuperpixelWalker:
         boundary_gradients.sort(key=lambda x: x[1], reverse=maximize)
         return [sp_id for sp_id, _ in boundary_gradients]
 
-    def walk_adjacency_graph(self, start_id: Optional[int] = None,
-                            strategy: str = 'bfs') -> List[int]:
+    def walk_adjacency_graph(
+        self, start_id: int | None = None, strategy: str = "bfs"
+    ) -> list[int]:
         """
         Walk through superpixels following adjacency graph.
 
@@ -353,9 +358,9 @@ class SuperpixelWalker:
             # Start from largest superpixel
             start_id = max(self.superpixels.items(), key=lambda x: x[1].area)[0]
 
-        if strategy == 'bfs':
+        if strategy == "bfs":
             order = list(nx.bfs_tree(G, start_id))
-        elif strategy == 'dfs':
+        elif strategy == "dfs":
             order = list(nx.dfs_tree(G, start_id))
         else:
             raise ValueError(f"Unknown strategy: {strategy}")
@@ -368,8 +373,9 @@ class SuperpixelWalker:
 
         return order
 
-    def visualize_superpixels(self, order: Optional[List[int]] = None,
-                             show_order: bool = True) -> np.ndarray:
+    def visualize_superpixels(
+        self, order: list[int] | None = None, show_order: bool = True
+    ) -> np.ndarray:
         """
         Visualize superpixels with optional ordering.
 
@@ -410,17 +416,23 @@ class SuperpixelWalker:
             start_sp = self.superpixels[order[0]]
             end_sp = self.superpixels[order[-1]]
 
-            cv2.circle(output, (start_sp.center[1], start_sp.center[0]),
-                      8, (0, 255, 0), -1)  # Green start
-            cv2.circle(output, (end_sp.center[1], end_sp.center[0]),
-                      8, (0, 0, 255), -1)  # Red end
+            cv2.circle(
+                output, (start_sp.center[1], start_sp.center[0]), 8, (0, 255, 0), -1
+            )  # Green start
+            cv2.circle(output, (end_sp.center[1], end_sp.center[0]), 8, (0, 0, 255), -1)  # Red end
 
             # Show order numbers
             if show_order:
                 for i, sp_id in enumerate(order[:20]):  # Show first 20
                     sp = self.superpixels[sp_id]
-                    cv2.putText(output, str(i),
-                              (sp.center[1] - 10, sp.center[0] + 5),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.4, (255, 255, 0), 1)
+                    cv2.putText(
+                        output,
+                        str(i),
+                        (sp.center[1] - 10, sp.center[0] + 5),
+                        cv2.FONT_HERSHEY_SIMPLEX,
+                        0.4,
+                        (255, 255, 0),
+                        1,
+                    )
 
         return output

@@ -11,9 +11,9 @@ from .dino import (
 )
 
 __all__ = [
-    'DINO',
-    'DINOHead',
-    'DINOLoss',
-    'MultiCropWrapper',
-    'update_teacher',
+    "DINO",
+    "DINOHead",
+    "DINOLoss",
+    "MultiCropWrapper",
+    "update_teacher",
 ]

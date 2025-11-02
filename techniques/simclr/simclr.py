@@ -63,7 +63,9 @@ class SimCLR(nn.Module):
 
         # Create positive pair mask
         # For each sample i, the positive pair is at position i + batch_size (or i - batch_size)
-        positive_mask = torch.zeros((2 * batch_size, 2 * batch_size), dtype=torch.bool, device=z.device)
+        positive_mask = torch.zeros(
+            (2 * batch_size, 2 * batch_size), dtype=torch.bool, device=z.device
+        )
         for i in range(batch_size):
             positive_mask[i, batch_size + i] = True
             positive_mask[batch_size + i, i] = True
@@ -113,9 +115,10 @@ def simclr_loss(z1, z2, temperature=0.5):
     representations = torch.cat([z1, z2], dim=0)
 
     # Similarity matrix
-    similarity_matrix = F.cosine_similarity(
-        representations.unsqueeze(1), representations.unsqueeze(0), dim=2
-    ) / temperature
+    similarity_matrix = (
+        F.cosine_similarity(representations.unsqueeze(1), representations.unsqueeze(0), dim=2)
+        / temperature
+    )
 
     # Create labels: for a batch of N, positive pairs are (i, N+i) and (N+i, i)
     sim_i_j = torch.diag(similarity_matrix, batch_size)

@@ -13,10 +13,10 @@ Core Concepts:
 - No negative pairs needed (unlike contrastive methods)
 """
 
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from typing import List
 
 
 class DINOHead(nn.Module):
@@ -69,9 +69,7 @@ class DINOHead(nn.Module):
 
         if norm_last_layer:
             # Normalize weights to prevent collapse
-            self.last_layer.weight.data.copy_(
-                F.normalize(self.last_layer.weight.data, dim=1)
-            )
+            self.last_layer.weight.data.copy_(F.normalize(self.last_layer.weight.data, dim=1))
 
     def forward(self, x):
         x = self.mlp(x)
@@ -97,7 +95,7 @@ class MultiCropWrapper(nn.Module):
         self.backbone = backbone
         self.head = head
 
-    def forward(self, x: List[torch.Tensor]):
+    def forward(self, x: list[torch.Tensor]):
         """
         Args:
             x: List of crops [global_crop1, global_crop2, local_crop1, ..., local_cropN]
@@ -106,19 +104,18 @@ class MultiCropWrapper(nn.Module):
             Concatenated output from all crops
         """
         # Only use global crops (first 2) for teacher
-        n_global = 2
 
         # Forward all crops through backbone
         if not isinstance(x, list):
             x = [x]
 
         # Get indices for global and local crops
-        idx_crops = torch.cumsum(
+        torch.cumsum(
             torch.unique_consecutive(
                 torch.tensor([inp.shape[-1] for inp in x]),
                 return_counts=True,
             )[1],
-            0
+            0,
         )
 
         # Concatenate all crops
@@ -280,7 +277,7 @@ class DINO(nn.Module):
 
         self.teacher_momentum = teacher_momentum
 
-    def forward(self, crops: List[torch.Tensor]):
+    def forward(self, crops: list[torch.Tensor]):
         """
         Forward pass with multi-crop training.
 

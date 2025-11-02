@@ -2,9 +2,8 @@
 ResNet backbone for SSL experiments.
 """
 
-import torch
 import torch.nn as nn
-from torchvision.models import resnet18, resnet50, ResNet18_Weights, ResNet50_Weights
+from torchvision.models import ResNet18_Weights, ResNet50_Weights, resnet18, resnet50
 
 
 class ResNetBackbone(nn.Module):
@@ -12,7 +11,7 @@ class ResNetBackbone(nn.Module):
     ResNet backbone with projection head for SSL.
     """
 
-    def __init__(self, arch='resnet50', proj_dim=128, pretrained=False):
+    def __init__(self, arch="resnet50", proj_dim=128, pretrained=False):
         """
         Args:
             arch: Architecture name ('resnet18', 'resnet50')
@@ -22,11 +21,11 @@ class ResNetBackbone(nn.Module):
         super().__init__()
 
         # Load base model
-        if arch == 'resnet18':
+        if arch == "resnet18":
             weights = ResNet18_Weights.IMAGENET1K_V1 if pretrained else None
             self.encoder = resnet18(weights=weights)
             feat_dim = 512
-        elif arch == 'resnet50':
+        elif arch == "resnet50":
             weights = ResNet50_Weights.IMAGENET1K_V1 if pretrained else None
             self.encoder = resnet50(weights=weights)
             feat_dim = 2048
@@ -38,9 +37,7 @@ class ResNetBackbone(nn.Module):
 
         # Projection head (typically 2-3 layer MLP)
         self.projection = nn.Sequential(
-            nn.Linear(feat_dim, feat_dim),
-            nn.ReLU(inplace=True),
-            nn.Linear(feat_dim, proj_dim)
+            nn.Linear(feat_dim, feat_dim), nn.ReLU(inplace=True), nn.Linear(feat_dim, proj_dim)
         )
 
     def forward(self, x, return_features=False):
@@ -60,7 +57,7 @@ class ResNetBackbone(nn.Module):
         return projections
 
 
-def build_resnet(arch='resnet50', proj_dim=128, pretrained=False):
+def build_resnet(arch="resnet50", proj_dim=128, pretrained=False):
     """
     Factory function to build ResNet backbone.
 
