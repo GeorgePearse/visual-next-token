@@ -1,8 +1,8 @@
-site_name: Image SSL - Self-Supervised Learning for Images
-site_description: Research implementation of self-supervised learning techniques for image understanding
+site_name: Visual Next Token - RL-Based Image Navigation
+site_description: Curiosity-driven reinforcement learning for learning semantic paths through images
 site_author: George Pearse
-repo_url: https://github.com/georgepearse/image-ssl
-repo_name: georgepearse/image-ssl
+repo_url: https://github.com/georgepearse/visual-next-token
+repo_name: georgepearse/visual-next-token
 
 theme:
   name: material

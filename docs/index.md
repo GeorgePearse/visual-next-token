@@ -1,10 +1,10 @@
-# Image SSL - Self-Supervised Learning for Images
+# Visual Next Token - RL-Based Image Navigation
 
-Welcome to the Image SSL documentation! This project explores novel self-supervised learning techniques for image understanding, with a focus on **curiosity-driven reinforcement learning** for learning semantic paths through images.
+Welcome to Visual Next Token! This project implements **curiosity-driven reinforcement learning** for learning semantic paths through images by maximizing prediction error of future visual tokens.
 
-## What is Image SSL?
+## What is Visual Next Token?
 
-Image SSL is a research implementation exploring how agents can learn to navigate images by seeking information-dense regions. The core insight: **an agent that maximizes prediction error (not accuracy) will naturally explore semantically meaningful paths** - from cars to roads to sky, following co-occurrence patterns in visual scenes.
+Visual Next Token explores how agents can learn to navigate images by seeking information-dense regions. The core insight: **an agent that maximizes prediction error (not accuracy) will naturally explore semantically meaningful paths** - from cars to roads to sky, following co-occurrence patterns in visual scenes.
 
 ## Key Features
 
