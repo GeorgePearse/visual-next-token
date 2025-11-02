@@ -1005,6 +1005,365 @@ Randomly mask tokens, predict them from unmasked context
 - **Aggressive JPEG**: Zero training, natural frequency ordering, fast prototyping
 - **Masked prediction**: Not truly sequential but very effective in practice
 
+---
+
+## Beyond 1D: Truly N-Dimensional Autoregressive Prediction 🔥 NEW!
+
+### The Fundamental Question
+
+**All approaches above linearize 2D images into 1D sequences. But why?**
+
+This is a limitation inherited from language models, where text is naturally 1D. But images are inherently 2D (or 3D with time/depth). **Can we do "next token prediction" in a truly N-dimensional way?**
+
+### The Core Insight: Frontier Prediction vs. Sequence Prediction
+
+#### 1D Next Token Prediction (Language)
+```
+Context:  [t-k, ..., t-2, t-1]
+Predict:  t
+
+Sequential: Only one "next" token exists
+```
+
+#### 2D Frontier Prediction (Images)
+```
+Context:  Filled region R ⊂ Z^2
+Predict:  Frontier ∂R (boundary pixels)
+
+Parallel: Multiple frontier pixels can be predicted simultaneously
+Spatial: Context is 2D neighborhood, not 1D history
+```
+
+#### N-D Frontier Prediction (General)
+```
+Context:  Filled region R ⊂ Z^N
+Predict:  Frontier ∂R (N-1 dimensional boundary)
+
+Examples:
+- 2D images: Predict boundary pixels given interior
+- 3D volumes: Predict surface voxels given interior
+- Video (2D+time): Predict spatial boundary at next frame
+```
+
+### Why This Matters
+
+**Linearization destroys spatial structure:**
+- Raster scan: Pixel (0,1) is "before" (1,0), but spatially they're neighbors
+- Walk-based: Arbitrary ordering based on heuristic
+- Sequential models: Process non-adjacent spatial neighbors at very different timesteps
+
+**Frontier prediction preserves spatial structure:**
+- Context is naturally 2D/ND: The filled region is a spatial set
+- Multiple predictions in parallel: All frontier pixels predicted together
+- Spatial coherence: Nearby frontier pixels share nearby context
+- Natural for images: Growing a region is more natural than scanning
+
+### Extending Transformers to N-Dimensions
+
+#### Challenge: Transformers Expect Sequences
+
+Standard transformer:
+```python
+# Input: (batch, sequence_length, d_model)
+# Attention: Each position attends to all previous positions
+# Output: (batch, sequence_length, d_model)
+
+# Position i can only attend to positions [0, 1, ..., i-1]
+# This is 1D causality
+```
+
+#### Solution 1: Spatial Masked Attention (PixelCNN-style)
+
+Generalize causality to N dimensions:
+
+```python
+# 2D Example: Raster order causality
+# Pixel (r, c) can attend to:
+#   - All pixels in rows [0, ..., r-1]
+#   - All pixels in row r with columns [0, ..., c-1]
+
+class SpatialMaskedAttention(nn.Module):
+    """
+    N-dimensional causal attention.
+
+    For 2D images with raster ordering:
+        Position (r1, c1) can attend to (r2, c2) iff:
+            - r2 < r1, OR
+            - r2 == r1 and c2 < c1
+    """
+
+    def create_2d_causal_mask(self, H, W):
+        # Flatten 2D positions to 1D
+        positions = torch.arange(H * W).view(H, W)
+
+        # Create mask based on 2D causality
+        mask = torch.zeros(H * W, H * W)
+        for r1 in range(H):
+            for c1 in range(W):
+                for r2 in range(H):
+                    for c2 in range(W):
+                        idx1 = r1 * W + c1
+                        idx2 = r2 * W + c2
+
+                        # Can attend if (r2, c2) is "before" (r1, c1)
+                        if r2 < r1 or (r2 == r1 and c2 < c1):
+                            mask[idx1, idx2] = 1
+
+        return mask
+```
+
+**Key insight**: This maintains 1D sequence but enforces 2D causality in the attention mask.
+
+#### Solution 2: Coordinate-Based Transformers (N-D Native)
+
+Inspired by NeRF, Perceiver, and coordinate-based networks:
+
+```python
+class CoordinateTransformer(nn.Module):
+    """
+    Truly N-dimensional transformer.
+
+    Instead of position indices, use actual N-D coordinates.
+    """
+
+    def __init__(self, n_dims, d_model, n_heads):
+        self.n_dims = n_dims
+        self.coord_encoder = FourierFeatures(n_dims, d_model // 2)
+        self.transformer = Transformer(d_model, n_heads)
+
+    def forward(self, coords, values, query_coords):
+        """
+        Args:
+            coords: (batch, n_context, n_dims) - Coordinates of known values
+            values: (batch, n_context, d_value) - Values at those coordinates
+            query_coords: (batch, n_query, n_dims) - Coordinates to predict
+
+        Returns:
+            (batch, n_query, d_value) - Predicted values at query coordinates
+        """
+        # Encode coordinates with Fourier features
+        context_encoding = self.coord_encoder(coords)  # (batch, n_context, d_model)
+        query_encoding = self.coord_encoder(query_coords)  # (batch, n_query, d_model)
+
+        # Combine coordinate encoding with values
+        context = torch.cat([context_encoding, values], dim=-1)
+
+        # Attend from queries to context
+        # No sequence ordering - purely spatial relationships
+        output = self.transformer(query_encoding, context)
+
+        return output
+
+
+class FourierFeatures(nn.Module):
+    """
+    Map N-D coordinates to high-frequency features.
+    From NeRF and coordinate-based networks.
+    """
+
+    def forward(self, coords):
+        # coords: (..., n_dims)
+        # Map to Fourier features: [sin(2πBx), cos(2πBx)]
+        # where B is a random frequency matrix
+
+        freq = coords @ self.B  # (..., d_model // 2)
+        return torch.cat([torch.sin(freq), torch.cos(freq)], dim=-1)
+```
+
+**Key insight**: No linearization! Coordinates stay as N-D vectors. Attention is purely spatial, not sequential.
+
+#### Solution 3: Frontier-Based Autoregressive
+
+Explicitly model the growing frontier:
+
+```python
+class FrontierPrediction(nn.Module):
+    """
+    Predict values at the frontier given filled region.
+
+    For images:
+        1. Start with seed region (e.g., center pixel)
+        2. Identify frontier (unvisited neighbors of filled region)
+        3. Predict all frontier pixels in parallel
+        4. Add predictions to filled region
+        5. Repeat until image complete
+    """
+
+    def forward(self, image_shape):
+        H, W = image_shape
+        filled = set()
+        predictions = {}
+
+        # Initialize: Start from center
+        center = (H // 2, W // 2)
+        filled.add(center)
+        predictions[center] = self.seed_value
+
+        while len(filled) < H * W:
+            # Find frontier
+            frontier = self.get_frontier(filled, H, W)
+
+            if not frontier:
+                break  # No more frontier (disconnected regions)
+
+            # Gather context for each frontier pixel
+            contexts = []
+            for (r, c) in frontier:
+                # Context: All filled neighbors
+                neighbors = self.get_filled_neighbors((r, c), filled)
+                context = self.build_context(neighbors, predictions)
+                contexts.append(context)
+
+            # Predict all frontier pixels in parallel
+            frontier_values = self.predict(contexts)  # (n_frontier, d_value)
+
+            # Add to filled region
+            for i, (r, c) in enumerate(frontier):
+                filled.add((r, c))
+                predictions[(r, c)] = frontier_values[i]
+
+        return predictions
+
+    def get_frontier(self, filled, H, W):
+        """Get all unvisited neighbors of filled region."""
+        frontier = set()
+        for (r, c) in filled:
+            for dr, dc in [(-1,0), (1,0), (0,-1), (0,1)]:  # 4-connected
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and (nr, nc) not in filled:
+                    frontier.add((nr, nc))
+        return list(frontier)
+```
+
+**Key insight**: Predict multiple pixels in parallel at each step. More efficient and preserves spatial structure.
+
+### Comparison: 1D vs. N-D Prediction
+
+| Aspect | 1D Sequential | N-D Frontier |
+|--------|---------------|--------------|
+| **Ordering** | Must linearize | No linearization needed |
+| **Context** | Previous tokens in sequence | Spatial neighborhood (filled region) |
+| **Parallelization** | Sequential (slow) | Parallel frontier (faster) |
+| **Spatial coherence** | Destroyed by linearization | Preserved naturally |
+| **Computational** | O(n²) attention for sequence length n | O(f²) where f = frontier size << n |
+| **Causality** | 1D: t depends on [1..t-1] | N-D: position depends on spatial neighbors |
+| **Natural for** | Text, audio, time series | Images, volumes, spatial data |
+
+### Practical Implementation Strategies
+
+#### Strategy 1: Hybrid (Best of Both Worlds)
+
+Use 1D transformers but with N-D awareness:
+
+```python
+class Hybrid2DTransformer(nn.Module):
+    """
+    1D transformer backbone with 2D positional encodings and attention masks.
+    """
+
+    def __init__(self, H, W, d_model):
+        self.pos_embed_2d = nn.Parameter(torch.randn(1, H, W, d_model))
+        self.transformer = Transformer(d_model)
+
+    def forward(self, x):
+        # x: (batch, H, W, d_model)
+
+        # Add 2D positional embeddings
+        x = x + self.pos_embed_2d
+
+        # Flatten to sequence but keep 2D structure in attention mask
+        batch, H, W, d = x.shape
+        x_flat = x.view(batch, H * W, d)
+
+        # Create 2D causal mask
+        mask = self.create_2d_causal_mask(H, W)
+
+        # Apply transformer with 2D awareness
+        output = self.transformer(x_flat, mask=mask)
+
+        # Reshape back to 2D
+        return output.view(batch, H, W, d)
+```
+
+#### Strategy 2: Pure N-D (Research Frontier)
+
+No sequences at all - pure coordinate-based:
+
+```python
+# Sample random query coordinates
+query_coords = torch.rand(batch, n_query, 2)  # Random (x, y) positions
+
+# Context: Previously "filled" coordinates
+context_coords = get_filled_coordinates()  # (batch, n_context, 2)
+context_values = get_filled_values()        # (batch, n_context, d_value)
+
+# Predict at query coordinates
+predictions = model(context_coords, context_values, query_coords)
+```
+
+This is completely dimension-agnostic and scales to any N!
+
+### Connection to Existing Methods
+
+**PixelCNN**: 2D causal convolutions ≈ local spatial masked attention
+
+**Image Transformer**: Uses 2D positional encodings but flattens to 1D sequence
+
+**Perceiver**: Coordinate-based, can handle arbitrary input dimensions
+
+**NUWA/Make-A-Video**: Extends to 3D (2D space + time) with factorized attention
+
+**NeRF/Coordinate Networks**: Pure N-D, no sequences, coordinate-based prediction
+
+### Why This Hasn't Been Standard
+
+1. **Transformers were designed for 1D** (language), and linearization worked well enough
+2. **Convolutions handled 2D** better than early transformers (inductive bias)
+3. **Computational cost**: Full N-D attention is expensive
+4. **Success of masked prediction** (MAE, BEiT) reduced need for autoregressive
+
+### The Future: True N-D Foundation Models?
+
+**Key Question**: Can we build foundation models that are natively N-dimensional?
+
+Imagine:
+- **Same architecture** for images, videos, 3D shapes, point clouds
+- **Coordinate-based**: Just different N-D input coordinates
+- **No linearization artifacts**
+- **Natural for spatial data**
+
+```python
+# Universal N-D Foundation Model
+model = UniversalNDModel(d_model=768)
+
+# Use for 2D images
+predictions_2d = model(coords_2d, values_2d, query_coords_2d)
+
+# Use for 3D volumes
+predictions_3d = model(coords_3d, values_3d, query_coords_3d)
+
+# Use for video (2D + time)
+predictions_video = model(coords_2dt, values_2dt, query_coords_2dt)
+
+# Use for point clouds
+predictions_points = model(coords_xyz, values_xyz, query_coords_xyz)
+```
+
+This is the true generalization of "next token prediction" to N dimensions!
+
+### Practical Next Steps
+
+For this project, we could implement:
+
+1. **2D Frontier Prediction Dataset**: Create training data from our image walks
+2. **Spatial Masked Attention**: Extend standard transformers with 2D causal masks
+3. **Coordinate Transformer**: Implement pure coordinate-based prediction
+4. **Hybrid Model**: Best of both worlds - transformer backbone with N-D awareness
+
+See `utils/nd_prediction.py` for initial implementation.
+
+---
+
 ### Recommendations: Practical Roadmap
 
 #### **Tier 1A: Quick Start with Aggressive JPEG** 💡 (Days to implement)
